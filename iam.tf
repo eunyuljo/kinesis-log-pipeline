@@ -75,6 +75,25 @@ resource "aws_iam_role_policy" "firehose_cloudwatch_policy" {
   })
 }
 
+# Firehose → Lambda 호출 권한
+resource "aws_iam_role_policy" "firehose_lambda_policy" {
+  name = "${var.project_name}-${var.environment}-firehose-lambda"
+  role = aws_iam_role.firehose_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "lambda:InvokeFunction"
+        ]
+        Resource = "${aws_lambda_function.log_transformer.arn}:*"
+      }
+    ]
+  })
+}
+
 # ============================================================
 # IAM User for On-Premise Kinesis Agent
 # ============================================================
