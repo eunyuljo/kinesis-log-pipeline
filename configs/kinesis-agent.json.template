@@ -1,0 +1,45 @@
+{
+  "cloudwatch.emitMetrics": true,
+  "cloudwatch.endpoint": "monitoring.ap-northeast-2.amazonaws.com",
+
+  "firehose.endpoint": "firehose.ap-northeast-2.amazonaws.com",
+
+  "flows": [
+    {
+      "filePattern": "/var/log/application/*.log",
+      "deliveryStream": "centralized-logs-dev-log-stream",
+      "initialPosition": "END_OF_FILE",
+      "maxBufferAgeMillis": 60000,
+      "maxBufferSizeRecords": 500,
+      "maxBufferSizeBytes": 1048576,
+      "minTimeBetweenFilePollsMillis": 1000,
+
+      "dataProcessingOptions": [
+        {
+          "optionName": "LOGTOJSON",
+          "logFormat": "COMBINEDAPACHELOG"
+        }
+      ]
+    },
+    {
+      "filePattern": "/var/log/nginx/access.log*",
+      "deliveryStream": "centralized-logs-dev-log-stream",
+      "initialPosition": "END_OF_FILE",
+      "maxBufferAgeMillis": 60000,
+      "dataProcessingOptions": [
+        {
+          "optionName": "LOGTOJSON",
+          "logFormat": "COMBINEDAPACHELOG",
+          "matchPattern": "^([\\d.]+) (\\S+) (\\S+) \\[([\\w:/]+\\s[+\\-]\\d{4})\\] \"(.+?)\" (\\d{3}) (\\d+) \"([^\"]+)\" \"([^\"]+)\"",
+          "customFieldNames": ["host", "ident", "authuser", "datetime", "request", "response", "bytes", "referrer", "agent"]
+        }
+      ]
+    },
+    {
+      "filePattern": "/var/log/application/app-json.log",
+      "deliveryStream": "centralized-logs-dev-log-stream",
+      "initialPosition": "END_OF_FILE",
+      "dataProcessingOptions": []
+    }
+  ]
+}

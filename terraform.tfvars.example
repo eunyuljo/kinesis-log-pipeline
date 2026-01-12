@@ -1,0 +1,41 @@
+# ============================================================
+# Terraform 변수 설정 파일 예시
+# 사용법: 이 파일을 terraform.tfvars로 복사하고 값을 수정하세요
+# cp terraform.tfvars.example terraform.tfvars
+# ============================================================
+
+# 프로젝트 설정
+project_name = "centralized-logs"
+environment  = "dev"  # dev, staging, prod
+region       = "ap-northeast-2"
+
+# S3 로그 보관 기간 (일)
+s3_log_retention_days = 90
+
+# CloudWatch Logs 보관 기간 (일)
+cloudwatch_log_retention_days = 7
+
+# Kinesis Firehose 버퍼 설정
+firehose_buffer_size     = 5    # MB (1-128)
+firehose_buffer_interval = 300  # 초 (60-900)
+
+# EC2 인스턴스 설정 (On-Premise 시뮬레이션)
+ec2_instance_type = "t3.small"  # t3.micro, t3.small, t3.medium
+
+# VPC Endpoint 설정 (Private 연결)
+# true: AWS 내부 네트워크 사용 (보안 강화, 추가 비용 ~$43/월)
+# false: Internet Gateway 사용 (비용 절감, 인터넷 경유) - 기본값
+enable_vpc_endpoints = false
+
+# Transit Gateway 아키텍처 설정
+# true: TGW + VPC Endpoints 사용 (엔터프라이즈급 시뮬레이션, ~$166/월)
+# false: 단일 VPC 사용 (학습/개발/테스트용, ~$30/월) - 기본값
+enable_tgw_architecture = false  # 테스트 및 학습용 권장
+
+# 공통 태그
+tags = {
+  ManagedBy   = "Terraform"
+  Purpose     = "Centralized Logging"
+  Owner       = "DevOps Team"
+  CostCenter  = "Engineering"
+}

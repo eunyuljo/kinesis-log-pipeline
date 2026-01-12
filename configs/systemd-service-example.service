@@ -1,0 +1,18 @@
+[Unit]
+Description=AWS Kinesis Agent
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/aws-kinesis-agent start
+ExecStop=/usr/bin/aws-kinesis-agent stop
+Restart=on-failure
+RestartSec=10s
+
+# 환경 변수 설정 (필요 시)
+Environment="AWS_REGION=ap-northeast-2"
+Environment="AWS_DEFAULT_REGION=ap-northeast-2"
+
+[Install]
+WantedBy=multi-user.target
