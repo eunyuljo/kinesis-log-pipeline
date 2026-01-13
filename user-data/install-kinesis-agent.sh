@@ -55,6 +55,15 @@ cat > /etc/aws-kinesis/agent.json <<'EOF'
       "minTimeBetweenFilePollsMillis": 1000
     },
     {
+      "filePattern": "/var/log/application/*.log",
+      "deliveryStream": "${cloudwatch_stream_name}",
+      "initialPosition": "END_OF_FILE",
+      "maxBufferAgeMillis": 60000,
+      "maxBufferSizeRecords": 500,
+      "maxBufferSizeBytes": 1048576,
+      "minTimeBetweenFilePollsMillis": 1000
+    },
+    {
       "filePattern": "/var/log/messages",
       "deliveryStream": "${firehose_stream_name}",
       "initialPosition": "END_OF_FILE",
@@ -66,8 +75,25 @@ cat > /etc/aws-kinesis/agent.json <<'EOF'
       ]
     },
     {
+      "filePattern": "/var/log/messages",
+      "deliveryStream": "${cloudwatch_stream_name}",
+      "initialPosition": "END_OF_FILE",
+      "maxBufferAgeMillis": 120000,
+      "dataProcessingOptions": [
+        {
+          "optionName": "SINGLELINE"
+        }
+      ]
+    },
+    {
       "filePattern": "/var/log/secure",
       "deliveryStream": "${firehose_stream_name}",
+      "initialPosition": "END_OF_FILE",
+      "maxBufferAgeMillis": 120000
+    },
+    {
+      "filePattern": "/var/log/secure",
+      "deliveryStream": "${cloudwatch_stream_name}",
       "initialPosition": "END_OF_FILE",
       "maxBufferAgeMillis": 120000
     }

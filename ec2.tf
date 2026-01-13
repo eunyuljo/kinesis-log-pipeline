@@ -66,7 +66,10 @@ resource "aws_iam_role_policy" "onpremise_kinesis" {
           "firehose:PutRecordBatch",
           "firehose:DescribeDeliveryStream"
         ]
-        Resource = aws_kinesis_firehose_delivery_stream.log_stream.arn
+        Resource = [
+          aws_kinesis_firehose_delivery_stream.log_stream.arn,
+          aws_kinesis_firehose_delivery_stream.cloudwatch_stream.arn
+        ]
       },
       {
         Effect = "Allow"
@@ -99,10 +102,11 @@ data "template_file" "user_data" {
   template = file("${path.module}/user-data/install-kinesis-agent.sh")
 
   vars = {
-    firehose_stream_name = aws_kinesis_firehose_delivery_stream.log_stream.name
-    region               = var.region
-    environment          = var.environment
-    project_name         = var.project_name
+    firehose_stream_name   = aws_kinesis_firehose_delivery_stream.log_stream.name
+    cloudwatch_stream_name = aws_kinesis_firehose_delivery_stream.cloudwatch_stream.name
+    region                 = var.region
+    environment            = var.environment
+    project_name           = var.project_name
   }
 }
 
@@ -119,7 +123,7 @@ resource "aws_instance" "onpremise_server" {
 
   root_block_device {
     volume_type           = "gp3"
-    volume_size           = 20
+    volume_size           = 30
     delete_on_termination = true
     encrypted             = true
 

@@ -88,7 +88,10 @@ resource "aws_iam_role_policy" "firehose_lambda_policy" {
         Action = [
           "lambda:InvokeFunction"
         ]
-        Resource = "${aws_lambda_function.log_transformer.arn}:*"
+        Resource = [
+          "${aws_lambda_function.log_transformer.arn}:*",
+          "${aws_lambda_function.cloudwatch_sender.arn}:*"
+        ]
       }
     ]
   })
@@ -129,7 +132,10 @@ resource "aws_iam_user_policy" "kinesis_agent_policy" {
           "firehose:PutRecordBatch",
           "firehose:DescribeDeliveryStream"
         ]
-        Resource = aws_kinesis_firehose_delivery_stream.log_stream.arn
+        Resource = [
+          aws_kinesis_firehose_delivery_stream.log_stream.arn,
+          aws_kinesis_firehose_delivery_stream.cloudwatch_stream.arn
+        ]
       }
     ]
   })

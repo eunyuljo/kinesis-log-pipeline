@@ -31,13 +31,13 @@ variable "cloudwatch_log_retention_days" {
 variable "firehose_buffer_size" {
   description = "Firehose 버퍼 크기 (MB)"
   type        = number
-  default     = 5
+  default     = 1  # 테스트용: 1MB (원래 5MB)
 }
 
 variable "firehose_buffer_interval" {
   description = "Firehose 버퍼 간격 (초)"
   type        = number
-  default     = 300
+  default     = 30  # 테스트용: 30초 (원래 300초/5분)
 }
 
 variable "ec2_instance_type" {

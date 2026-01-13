@@ -13,13 +13,23 @@ output "s3_bucket_arn" {
 }
 
 output "firehose_stream_name" {
-  description = "Kinesis Firehose 스트림 이름"
+  description = "Kinesis Firehose 스트림 이름 (S3용)"
   value       = aws_kinesis_firehose_delivery_stream.log_stream.name
 }
 
 output "firehose_stream_arn" {
-  description = "Kinesis Firehose 스트림 ARN"
+  description = "Kinesis Firehose 스트림 ARN (S3용)"
   value       = aws_kinesis_firehose_delivery_stream.log_stream.arn
+}
+
+output "cloudwatch_stream_name" {
+  description = "Kinesis Firehose 스트림 이름 (CloudWatch용)"
+  value       = aws_kinesis_firehose_delivery_stream.cloudwatch_stream.name
+}
+
+output "cloudwatch_stream_arn" {
+  description = "Kinesis Firehose 스트림 ARN (CloudWatch용)"
+  value       = aws_kinesis_firehose_delivery_stream.cloudwatch_stream.arn
 }
 
 output "cloudwatch_log_group_name" {

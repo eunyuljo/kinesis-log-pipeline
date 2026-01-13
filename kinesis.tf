@@ -121,3 +121,136 @@ resource "aws_lambda_permission" "allow_firehose" {
   principal     = "firehose.amazonaws.com"
   source_arn    = aws_kinesis_firehose_delivery_stream.log_stream.arn
 }
+
+# ============================================================
+# CloudWatch Logs 전용 Lambda Function 추가
+# ============================================================
+
+# CloudWatch 전송용 Lambda 함수
+resource "aws_lambda_function" "cloudwatch_sender" {
+  filename      = "lambda_cloudwatch.zip"
+  function_name = "${var.project_name}-${var.environment}-cloudwatch-sender"
+  role          = aws_iam_role.cloudwatch_lambda_role.arn
+  handler       = "lambda/cloudwatch_sender.handler"
+  runtime       = "python3.11"
+  timeout       = 300
+
+  environment {
+    variables = {
+      LOG_GROUP_NAME = "/aws/kinesis/${var.project_name}-${var.environment}/application"
+      ENVIRONMENT    = var.environment
+      PROJECT        = var.project_name
+    }
+  }
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-cloudwatch-sender"
+  }
+}
+
+# CloudWatch Lambda용 IAM 역할
+resource "aws_iam_role" "cloudwatch_lambda_role" {
+  name = "${var.project_name}-${var.environment}-cloudwatch-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+# CloudWatch Lambda 기본 실행 권한
+resource "aws_iam_role_policy_attachment" "cloudwatch_lambda_basic" {
+  role       = aws_iam_role.cloudwatch_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+# CloudWatch Logs 쓰기 권한
+resource "aws_iam_role_policy" "cloudwatch_lambda_logs" {
+  name = "${var.project_name}-${var.environment}-cloudwatch-lambda-logs"
+  role = aws_iam_role.cloudwatch_lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:PutRetentionPolicy",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# ============================================================
+# CloudWatch 전용 Firehose Stream 추가
+# ============================================================
+
+resource "aws_kinesis_firehose_delivery_stream" "cloudwatch_stream" {
+  name        = "${var.project_name}-${var.environment}-cloudwatch-stream"
+  destination = "extended_s3"
+
+  # CloudWatch Lambda 처리를 위한 임시 S3 (실제로는 사용되지 않음)
+  extended_s3_configuration {
+    role_arn   = aws_iam_role.firehose_role.arn
+    bucket_arn = aws_s3_bucket.log_storage.arn
+
+    # 임시 저장소 (CloudWatch로 전송 후 삭제 예정)
+    prefix              = "temp-cloudwatch/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/"
+    error_output_prefix = "temp-errors/"
+
+    # 최소 버퍼링 (빠른 CloudWatch 전송을 위해)
+    buffering_size     = 1
+    buffering_interval = 60
+
+    compression_format = "UNCOMPRESSED"
+
+    # CloudWatch 전송용 Lambda 처리
+    processing_configuration {
+      enabled = true
+
+      processors {
+        type = "Lambda"
+        parameters {
+          parameter_name  = "LambdaArn"
+          parameter_value = "${aws_lambda_function.cloudwatch_sender.arn}:$LATEST"
+        }
+      }
+    }
+
+    # CloudWatch Logs 로깅
+    cloudwatch_logging_options {
+      enabled         = true
+      log_group_name  = aws_cloudwatch_log_group.firehose_logs.name
+      log_stream_name = "CloudWatchDelivery"
+    }
+  }
+
+  tags = {
+    Name        = "${var.project_name}-${var.environment}-cloudwatch-firehose"
+    Description = "Firehose for CloudWatch Logs delivery"
+  }
+}
+
+# CloudWatch Firehose가 Lambda를 호출할 권한
+resource "aws_lambda_permission" "allow_firehose_cloudwatch" {
+  statement_id  = "AllowExecutionFromCloudWatchFirehose"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cloudwatch_sender.function_name
+  principal     = "firehose.amazonaws.com"
+  source_arn    = aws_kinesis_firehose_delivery_stream.cloudwatch_stream.arn
+}

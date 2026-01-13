@@ -154,6 +154,204 @@ aws s3 cp s3://$(terraform output -raw s3_bucket_name)/logs/year=2024/month=01/d
 
 ---
 
+## 🧪 시스템 테스트 명령어
+
+### 1. 기본 상태 확인
+
+```bash
+# Terraform 출력 확인
+terraform output
+
+# EC2 인스턴스 상태 확인
+aws ec2 describe-instances --instance-ids $(terraform output -raw ec2_instance_id) --query 'Reservations[].Instances[].State.Name'
+
+# S3 버킷 존재 확인
+aws s3 ls s3://$(terraform output -raw s3_bucket_name)
+
+# CloudWatch 로그 그룹 확인
+aws logs describe-log-groups --log-group-name-prefix "/aws/kinesis"
+```
+
+### 2. Kinesis Agent 상태 확인
+
+```bash
+# EC2에 접속 후 실행
+aws ssm start-session --target $(terraform output -raw ec2_instance_id)
+
+# Agent 상태 확인
+sudo systemctl status aws-kinesis-agent
+
+# Agent 설정 확인
+sudo cat /etc/aws-kinesis/agent.json | python -m json.tool
+
+# Agent 로그 실시간 확인
+sudo tail -f /var/log/aws-kinesis-agent/aws-kinesis-agent.log
+```
+
+### 3. 기본 로그 생성 테스트
+
+```bash
+# 단일 테스트 로그 생성
+echo "$(date) [INFO] Basic test log from EC2" | sudo tee -a /var/log/application/test.log
+
+# 여러 로그 생성
+for i in {1..10}; do
+  echo "$(date) [TEST-$i] Multiple test logs for verification" | sudo tee -a /var/log/application/test.log
+  sleep 1
+done
+
+# 로그 파일 확인
+tail -20 /var/log/application/test.log
+```
+
+### 4. 대용량 로그 테스트 ⚡
+
+```bash
+# 50개 배치 테스트 (1MB 버퍼 채우기용)
+echo "=== Starting 50-log batch test ===" | sudo tee -a /var/log/application/test.log
+for i in {1..50}; do
+  echo "$(date) [BATCH-TEST-$i] Large batch of test logs to fill buffer quickly - $(date +%s%N)" | sudo tee -a /var/log/application/test.log
+done
+echo "=== Completed 50-log batch test ===" | sudo tee -a /var/log/application/test.log
+
+# 100개 성능 테스트 (타이밍 측정)
+echo "=== Starting 100-log performance test ===" | sudo tee -a /var/log/application/test.log
+start_time=$(date +%s)
+for i in {1..100}; do
+  echo "$(date) [PERF-TEST-$i] Performance testing log entry - Timestamp: $(date +%s%N)" | sudo tee -a /var/log/application/test.log
+done
+end_time=$(date +%s)
+duration=$((end_time - start_time))
+echo "=== Performance test completed in $duration seconds ===" | sudo tee -a /var/log/application/test.log
+
+# 연속 로그 스트림 테스트 (30초간)
+echo "=== Starting continuous log stream test ===" | sudo tee -a /var/log/application/test.log
+timeout 30s bash -c 'i=1; while true; do echo "$(date) [STREAM-$i] Continuous stream log entry" | sudo tee -a /var/log/application/test.log; i=$((i+1)); sleep 0.5; done'
+echo "=== Continuous stream test completed ===" | sudo tee -a /var/log/application/test.log
+```
+
+### 5. S3 저장 확인
+
+```bash
+# 30초 후 S3 확인 (버퍼링 대기)
+sleep 30
+aws s3 ls s3://$(terraform output -raw s3_bucket_name)/logs/ --recursive
+
+# 최신 로그 파일 다운로드 및 확인
+latest_file=$(aws s3 ls s3://$(terraform output -raw s3_bucket_name)/logs/ --recursive | sort | tail -n 1 | awk '{print $4}')
+aws s3 cp s3://$(terraform output -raw s3_bucket_name)/$latest_file - | gunzip | head -10
+
+# S3에 저장된 로그 수 확인
+aws s3api list-objects-v2 --bucket $(terraform output -raw s3_bucket_name) --prefix "logs/" --query 'KeyCount'
+```
+
+### 6. CloudWatch Logs 실시간 확인
+
+```bash
+# 실시간 로그 스트림 확인
+aws logs tail $(terraform output -raw cloudwatch_log_group_name) --follow
+
+# 특정 시간대 로그 확인 (최근 10분)
+aws logs filter-log-events \
+  --log-group-name $(terraform output -raw cloudwatch_log_group_name) \
+  --start-time $(date -d "10 minutes ago" +%s)000 \
+  --query 'events[].message'
+
+# 로그 개수 확인
+aws logs describe-metric-filters \
+  --log-group-name $(terraform output -raw cloudwatch_log_group_name)
+```
+
+### 7. Lambda 함수 모니터링
+
+```bash
+# S3 변환 Lambda 로그 확인
+aws logs tail /aws/lambda/$(terraform output -raw project_name)-$(terraform output -raw environment)-log-transformer --follow
+
+# CloudWatch 전송 Lambda 로그 확인
+aws logs tail /aws/lambda/$(terraform output -raw project_name)-$(terraform output -raw environment)-cloudwatch-sender --follow
+
+# Lambda 실행 통계 확인
+aws logs filter-log-events \
+  --log-group-name /aws/lambda/$(terraform output -raw project_name)-$(terraform output -raw environment)-log-transformer \
+  --filter-pattern "REPORT"
+```
+
+### 8. Firehose 스트림 상태
+
+```bash
+# Firehose 스트림 상태 확인
+aws firehose describe-delivery-stream --delivery-stream-name $(terraform output -raw project_name)-$(terraform output -raw environment)-log-stream
+
+# Firehose CloudWatch 스트림 상태 확인
+aws firehose describe-delivery-stream --delivery-stream-name $(terraform output -raw project_name)-$(terraform output -raw environment)-cloudwatch-stream
+
+# Firehose 메트릭 확인
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/Kinesis/Firehose \
+  --metric-name DeliveryToS3.Records \
+  --dimensions Name=DeliveryStreamName,Value=$(terraform output -raw project_name)-$(terraform output -raw environment)-log-stream \
+  --start-time $(date -d "1 hour ago" --iso-8601) \
+  --end-time $(date --iso-8601) \
+  --period 300 \
+  --statistics Sum
+```
+
+### 9. 버퍼링 테스트
+
+```bash
+# 빠른 버퍼 채우기 (1MB/30초 설정 확인)
+echo "=== Testing buffer limits (1MB/30sec) ===" | sudo tee -a /var/log/application/test.log
+for i in {1..20}; do
+  # 긴 로그 메시지로 버퍼 빠르게 채우기
+  msg="$(date) [BUFFER-TEST-$i] $(printf '=%.0s' {1..100}) Large message to fill buffer quickly"
+  echo "$msg" | sudo tee -a /var/log/application/test.log
+done
+
+# 30초 대기 후 S3 확인
+echo "Waiting 30 seconds for buffer flush..."
+sleep 30
+aws s3 ls s3://$(terraform output -raw s3_bucket_name)/logs/ --recursive | tail -5
+```
+
+### 10. 종합 시스템 검증
+
+```bash
+# 전체 시스템 헬스체크
+echo "=== System Health Check Started ===" | sudo tee -a /var/log/application/test.log
+
+# 1. Agent 동작 확인
+if sudo systemctl is-active --quiet aws-kinesis-agent; then
+  echo "✅ Kinesis Agent is running" | sudo tee -a /var/log/application/test.log
+else
+  echo "❌ Kinesis Agent is not running" | sudo tee -a /var/log/application/test.log
+fi
+
+# 2. 테스트 로그 생성
+for i in {1..5}; do
+  echo "$(date) [HEALTH-CHECK-$i] System verification log entry" | sudo tee -a /var/log/application/test.log
+done
+
+# 3. 1분 후 결과 확인
+sleep 60
+
+# 4. CloudWatch 확인
+echo "CloudWatch Logs (최근 5개):"
+aws logs filter-log-events \
+  --log-group-name $(terraform output -raw cloudwatch_log_group_name) \
+  --start-time $(date -d "2 minutes ago" +%s)000 \
+  --query 'events[-5:].message' \
+  --output text
+
+# 5. S3 확인
+echo "S3 Storage (최신 파일):"
+aws s3 ls s3://$(terraform output -raw s3_bucket_name)/logs/ --recursive | tail -3
+
+echo "=== System Health Check Completed ===" | sudo tee -a /var/log/application/test.log
+```
+
+---
+
 ## 💰 비용
 
 ### 예상 월간 비용: ~$30
